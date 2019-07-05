@@ -1,5 +1,5 @@
 ---
-title: Normalizing single-cell RNA-seq data using spike-in information
+title: 使用 spike-in 信息进行单细胞 RNA 测序数据归一化
 author: 
 - name: Aaron T. L. Lun
   affiliation: &CRUK Cancer Research UK Cambridge Institute, Li Ka Shing Centre, Robinson Way, Cambridge CB2 0RE, United Kingdom
@@ -31,27 +31,27 @@ opts_chunk$set(error=FALSE, message=FALSE, warning=FALSE, cache=TRUE)
 opts_chunk$set(fig.asp=1)
 ```
 
-# Motivation 
+# 动机
 
-Scaling normalization strategies for scRNA-seq data can be broadly divided into two classes.
-The first class assumes that there exists a subset of genes that are not DE between samples, as described in the previous workflows.
-The second class uses the fact that the same amount of spike-in RNA was added to each cell [@lun2017assessing].
-Differences in the coverage of the spike-in transcripts can only be due to cell-specific biases, e.g., in capture efficiency or sequencing depth.
-Scaling normalization is then applied to equalize spike-in coverage across cells.
+对于单细胞 RNA 测序数据的缩放归一化策略可大体分为两类。
+如之前工作流程所述，第一类策略假设一部分基因在样本间没有差异表达。
+第二类策略运用了加入每个细胞内的 spike-in RNA 数量相同的事实 [@lun2017assessing]。
+Spike-in 转录本覆盖度的差异只可能由细胞特异性偏差导致，例如捕获效率或测序深度。
+缩放归一化可以用来平衡细胞间的 spike-in 覆盖度。
 
-The choice between these two normalization strategies depends on the biology of the cells and the features of interest.
-If the majority of genes are expected to be DE and there is no reliable house-keeping set, spike-in normalization may be the only option for removing cell-specific biases.
-Spike-in normalization should also be used if differences in the total RNA content of individual cells are of interest.
-In any particular cell, an increase in the amount of endogenous RNA will not increase spike-in coverage (with or without library quantification).
-Thus, the former will not be represented as part of the bias in the latter, which means that the effects of total RNA content on expression will not be removed upon scaling.
-With non-DE normalization, an increase in RNA content will systematically increase the expression of all genes in the non-DE subset, such that it will be treated as bias and removed.
+选择哪一个策略取决于细胞的生物学和感兴趣的特征。
+如果预计大部分基因差异表达并且没有可信的管家基因集，spike-in 归一化可能是去除细胞特异性偏差的唯一选择。
+对个体细胞总 RNA 含量差异感兴趣的话也可以使用 spike-in 归一化。
+在任何特定细胞中，内源 RNA 数量的增加并不会提升 spike-in 覆盖度（无论是否进行文库量化）。
+因此前者不会成为后者偏差的一部分，意味着缩放时总 RNA 含量对表达量的影响不会被移除。
+对于不含差异表达的归一化，RNA 含量增加会系统提升非差异表达基因集中所有基因的表达量，这会被作为偏差处理并被移除。
 
-# Setting up the data
+# 构建数据
 
-## Obtaining the dataset
+## 获取数据
 
-We demonstrate the use of spike-in normalization on a dataset involving different cell types -- namely, mouse embryonic stem cells (mESCs) and mouse embryonic fibroblasts (MEFs) [@islam2011characterization].
-The count table was obtained from the NCBI Gene Expression Omnibus (GEO) as a supplementary file using the accession number [GSE29087](http://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE29087).
+我们在一个包含不同细胞类型的数据集上演示 spike-in 归一化 —— 包括小鼠胚胎干细胞（mESC）和小鼠胚胎成纤维细胞（MEF）[@islam2011characterization]。
+基因计数表可通过登录号 [GSE29087](http://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE29087) 从 NCBI Gene Expression Omnibus（GEO）数据库作为补充文件获取。
 
 ```{r}
 library(BiocFileCache)
@@ -60,8 +60,8 @@ islam.fname <- bfcrpath(bfc, file.path("ftp://ftp.ncbi.nlm.nih.gov/geo/series",
     "GSE29nnn/GSE29087/suppl/GSE29087_L139_expression_tab.txt.gz"))
 ```
 
-We load the counts into R, using `colClasses` to speed up `read.table` by pre-defining the type of each column.
-We also specify the rows corresponding to spike-in transcripts.
+使用 `colClasses` 通过预先定义每一列的类型加速 `read.table` 来将计数表加载进R。
+此外还指定了对应 spike-in 转录本的行。
 
 ```{r}
 library(SingleCellExperiment)
@@ -75,11 +75,11 @@ isSpike(sce.islam, "spike") <- is.spike
 dim(sce.islam)
 ```
 
-## Applying quality control
+## 应用质量控制
 
-We perform some quality control to remove low-quality cells using the `calculateQCMetrics` function.
-Outliers are identified within each cell type to avoid issues with systematic differences in the metrics between cell types.
-The negative control wells do not contain any cells and are useful for quality control (as they _should_ manifest as outliers for the various metrics), but need to be removed prior to downstream analysis.
+使用 `calculateQCMetric` 函数执行质量控制来移除低质量细胞。
+识别出每个细胞类型中的异常值以避免各类型细胞指标间系统差异的问题。
+阴性对照井不包含任何细胞，仅用于质量控制（因为他们 __应当__ 表现为各种指标的异常值），但要在下游分析前将它们移除。
 
 ```{r}
 library(scater)
@@ -99,11 +99,11 @@ data.frame(ByLibSize=sum(libsize.drop), ByFeature=sum(feature.drop),
     BySpike=sum(spike.drop), Remaining=ncol(sce.islam))
 ```
 
-# Calculating spike-in size factors 
+# 计算 spike-in 量化因子
 
-We apply the `computeSpikeFactors` method to estimate size factors for all cells.
-This method computes the total count over all spike-in transcripts in each cell, and calculates size factors to equalize the total spike-in count across cells. 
-Here, we set `general.use=TRUE` as we intend to apply the spike-in factors to all counts.
+使用 `computeSpikeFactors` 方法估计所有细胞的量化因子。
+该方法计算了每个细胞中所有 spike-in 转录本总计数，得出量化因子来平衡细胞间的 spike-in 总计数。
+这里设置 `general.use = TRUE` 因为我们打算对所有计数使用 spike-in 因子。
 
 ```{r}
 library(scran)
@@ -112,16 +112,16 @@ head(sizeFactors(sce.islam))
 head(sizeFactors(sce.islam, "spike")) # same as general size factors.
 ```
 
-Running `normalize` will use the spike-in-based size factors to compute normalized log-expression values.
-Unlike the previous analyses, we do not have to define separate size factors for the spike-in transcripts.
-This is because the relevant factors are already being used for all genes and spike-in transcripts when `general.use=TRUE`.
-(The exception is if the experiment uses multiple spike-in sets that behave differently and need to be normalized separately.)
+运行 `normalize` 会使用基于 spike-in 的量化因子来计算归一化对数表达量。
+和之前的分析不同，我们不需要对 spike-in 转录本单独定义量化因子。
+这是因为当 `general.use=TRUE` 时，相关因子已经为所有基因和 spike-in 转录本所用。
+（特例是当实验使用了多个 spike-in 基因集时，它们行为不同，需要各自进行归一化。）
 
 ```{r}
 sce.islam <- normalize(sce.islam)
 ```
 
-For comparison, we also compute the deconvolution size factors for this data set [@lun2016pooling].
+为了对比，我们还在这个数据集 [@lun2016pooling] 上计算了去卷积量化因子。
 
 ```{r}
 deconv.sf <- computeSumFactors(sce.islam, sf.out=TRUE, 
@@ -129,10 +129,9 @@ deconv.sf <- computeSumFactors(sce.islam, sf.out=TRUE,
 head(deconv.sf)
 ```
 
-We observe a negative correlation between the two sets of size factors (Figure \@ref(fig:normplotspikemef)).
-This is because MEFs contain more endogenous RNA, which reduces the relative spike-in coverage in each library (thereby decreasing the spike-in size factors) but increases the coverage of endogenous genes (thus increasing the deconvolution size factors).
-If the spike-in size factors were applied to the counts, the expression values in MEFs would be scaled up while expression in mESCs would be scaled down.
-However, the opposite would occur if deconvolution size factors were used.
+我们观察到两组量化因子之间呈负相关（图 \@ref(fig:normplotspikemef)）。
+这是因为 MEF 包含更多的内源 RNA，降低了每个文库中的相对 spike-in 覆盖度（从而降低了 spike-in 量化因子）但提高了内源基因覆盖度（从而提高了去卷积量化因子）。
+但如果使用去卷积量化因子，可能会出现相反的情况。
 
 ```{r normplotspikemef, fig.cap="Size factors from spike-in normalization, plotted against the size factors from deconvolution for all cells in the mESC/MEF dataset. Axes are shown on a log-scale, and cells are coloured according to their identity. Deconvolution size factors were computed with small pool sizes owing to the low number of cells of each type."}
 colours <- c(mESC="red", MEF="grey")
@@ -141,26 +140,25 @@ plot(sizeFactors(sce.islam), deconv.sf, col=colours[sce.islam$grouping], pch=16,
 legend("bottomleft", col=colours, legend=names(colours), pch=16)
 ```
 
-Whether or not total RNA content is relevant -- and thus, the choice of normalization strategy -- depends on the biological hypothesis. 
-In the HSC and brain analyses, variability in total RNA across the population was treated as noise and removed by non-DE normalization.
-This may not always be appropriate if total RNA is associated with a biological difference of interest.
-For example, @islam2011characterization observe a 5-fold difference in total RNA between mESCs and MEFs.
-Similarly, the total RNA in a cell changes across phases of the cell cycle [@buettner2015computational].
-Spike-in normalization will preserve these differences in total RNA content such that the corresponding biological groups can be easily resolved in downstream analyses.
+无论总 RNA 容量是否相关，归一化策略的选择都依赖于生物假设。
+在造血干细胞和脑分析中，群体间总 RNA 的差异被当作噪音，通过非差异表达归一化移除。
+如果总 RNA 和感兴趣的生物差异有关的话，这个就不一定适用。
+例如 @islam2011characterization 观察到 mESC 和 MEF 之间总 RNA 的 5 倍差异。
+类似的，细胞周期不同阶段总 RNA 也在变化 [@buettner2015computational]。
+Spike-in 归一化会保留总 RNA 含量的差异，这样在后续分析中处理对应生物组也会更加容易。
 
-__Comments from Aaron:__
+__来自 Aaron 的评论：__
 
-- Setting `sf.out=TRUE` will directly return the size factors, rather than a `SingleCellExperiment` object containing those factors.
-This is more convenient when only the size factors are required for further analysis.
+- 设定 `sf.out=TRUE` 会直接返回量化因子而不是包含那些因子的 `SingleCellExperiment` 对象。
+当我们只需要量化因子进行后续分析时这样更方便。
 
-# Concluding remarks 
+# 结语
 
-All software packages used in this workflow are publicly available from the Comprehensive R Archive Network (https://cran.r-project.org) or the Bioconductor project (http://bioconductor.org).
-The specific version numbers of the packages used are shown below, along with the version of the R installation.
+此工作流程中的所有软件包都可以在 Comprehensive R Archive Network (https://cran.r-project.org) 或 Bioconductor project (http://bioconductor.org) 获取。
+包的版本号及对应的R版本如下所示。
 
 ```{r}
 sessionInfo()
 ```
 
-# References
-
+# 参考文献
