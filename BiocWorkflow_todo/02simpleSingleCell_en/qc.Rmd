@@ -1,5 +1,5 @@
 ---
-title: Elaborating on cell-based quality control in single-cell RNA-seq data
+title: 探讨单细胞 RNA 测序数据中基于细胞的质量控制
 author: 
 - name: Aaron T. L. Lun
   affiliation: &CRUK Cancer Research UK Cambridge Institute, Li Ka Shing Centre, Robinson Way, Cambridge CB2 0RE, United Kingdom
@@ -36,54 +36,54 @@ simpleSingleCell:::.compile("reads") # 416B
 simpleSingleCell:::.compile("tenx") # PBMC 
 ```
 
-# Overview
+# 综述
 
-Low-quality cells can often yield misleading results in downstream analyses, by:
+低质量细胞在下游分析中会得出误导性结果，它们可能：
 
-- forming their own distinct cluster(s), complicating interpretation of the results.
-This can be most obviously driven by increased mitochondrial proportions or enrichment for nuclear RNAs after cell damage.
-However, very small libraries can also form their own clusters due to shifts in the mean upon log-transformation.
-- containing genes that appear to be strongly "upregulated" due to the presence of very small size factors.
-This is most problematic if some transcripts are present at constant levels in the ambient solution for all cells (i.e., wells or droplets).
-Small counts will then be greatly inflated upon normalization with these size factors.
-- containing genes that appear to be strongly "downregulated" due to the loss of RNA upon cell damage.
-This seems most pronounced with ribosomal protein genes, though other cytoplasmic transcripts are likely to be affected.
-- distorting the characterization of population heterogeneity during variance estimation or principal components analysis.
-The first few principal components will capture differences in quality rather than biology, reducing the effectiveness of dimensionality reduction.
-Similarly, genes with the largest variances will be driven by differences between low- and high-quality cells.
+- 自己形成完全分离的类群，使结果难以解释。
+这种情况最有可能是细胞损伤后线粒体比例增加或核RNA富集所致。
+但由于对数变换使得平均值改变，一些非常小的文库可能也会自己形成类群。
+- 由于细胞过小使得包含基因呈现急剧上调。
+如果所有细胞中都有一些转录本在环境溶液中（例如井或雨滴）恒定存在，这个问题就最为棘手。
+对量化因子归一化后，小的计数会极大增加。
+- 由于细胞损伤 RNA 丢失使得包含基因呈现急剧下调。
+虽然其他细胞质转录本也可能受到影响，但受影响最大的是核糖体蛋白质基因。
+- 在差异估计或主成分分析中改变群体异质性的特征。
+前几个主成分捕捉到的可能是质量差异而不是生物差异，降低了降维工作的有效性。
+同样，差异较大的基因可能是由高低质量细胞间差异所致。
 
-As such, we need to remove these cells at the start of the analysis.
-Recall that we were defining low-quality cells as those with outlier values for various quality control (QC) metrics,
-using the `isOutlier()` and `calculateQCMetrics()` functions from the `r Biocpkg("scater")` package [@mccarthy2017scater].
-Here, we will examine some of the reasoning behind the outlier-based QC in more detail.
+正因如此，我们需要在开始分析时移除这些低质量细胞。
+之前我们将低质量细胞定义为在各质量控制指标上存在异常值的细胞，
+可通过 `r Biocpkg("scater")` [@mccarthy2017scater] 中的 `isOutlier()` 函数和 `calculateQCMetrics()`  函数得到结果。
+这里，我们将深入考察基于异常值质量控制背后的一些细节。
 
-# Assumptions of outlier identification 
+# 异常值识别的假设
 
-An outlier-based definition for low-quality cells assumes that most cells are of high quality.
-This is usually reasonable and can be experimentally supported in some situations by visually checking that the cells are intact, e.g., on the microwell plate.
-Another assumption is that the QC metrics are independent on the biological state of each cell.
-This ensures that any outlier values for these metrics are driven by technical factors rather than biological processes.
-Thus, removing cells based on the metrics will not misrepresent the biology in downstream analyses.
+基于异常值定义的低质量细胞假设大多数细胞都是高质量细胞。
+这一假设通常是合理的，在一些情况下可以通过肉眼检查（例如在微孔板上）细胞的完整性来作为实验支持。
+另一个假设是质量控制指标独立于每个细胞的生物状态。
+这样可以确保这些指标的任何异常值都是由技术原因而非生物过程引起。
+因此，基于这些指标移除细胞不会在下游分析时影响生物学解释。
 
-The second assumption is most likely to be violated in highly heterogeneous cell populations.
-For example, some cell types may naturally have less RNA or express fewer genes than other cell types.
-Such cell types are more likely to be considered outliers and removed, even if they are of high quality.
-The use of the MAD mitigates this problem by accounting for biological variability in the QC metrics.
-A heterogeneous population should have higher variability in the metrics among high-quality cells, increasing the MAD and reducing the chance of incorrectly removing particular cell types (at the cost of reducing power to remove low-quality cells).
-Nonetheless, filtering based on outliers may not be appropriate in extreme cases where one cell type is very different from the others.
+细胞群体中的高度异质可能会违反第二个假设。
+例如某些细胞类型包含 RNA 或表达基因天然地比其他细胞类型少。
+即使它们是高质量细胞，却更可能被认为是异常值而去除。
+MAD（中位数绝对偏差）通过解释质量控制指标中的生物差异缓和了这个问题。
+高质量细胞中的异质群体应该在指标上具有更大差异性，提高 MAD  且降低了错误去除特定细胞类型的机会（以减少移除低质量细胞为代价）。
+虽然如此，基于异常值进行筛选可能在极端情况下并不合适，例如其中一个细胞类型和其余类型差异极大。
 
-Systematic differences in the QC metrics can be handled to some extent using the `batch=` argument in the `isOutlier()` function.
-For example, setting `batch` to the plate of origin will identify outliers within each level of `batch`, using plate-specific median and MAD estimates.
-This is obviously useful for accommodating known differences in experimental processing, e.g., sequencing at different depth or different amounts of added spike-in RNA. 
-We can also include biological factors in `batch`, if those factors could result in systematically fewer expressed genes or lower RNA content.
-However, this is not applicable in experiments where the factors are not known in advance.
+在一定程度上，质量控制指标中的系统差异可以通过 `isOutlier()` 函数中的 `batch=` 参数处理。
+例如将 `batch` 设置为初始平板就可以通过平板特异中位数和 MAD 估计识别出每个水平 `batch` 中的异常值。
+这对于实验过程中考虑已知差异非常有用，例如以不同深度测序或是加入不同数量的spike-in RNA。
+如果有些生物因素会引起系统性的表达基因减少或 RNA 容量降低，我们还可以在 `batch` 中引入生物因素。
+但是这不适用于事先不知道这些因素的实验。
 
-# Checking for discarded cell types
+# 检查被去除的细胞类型
 
-## In the 416B data set 
+# 416B数据集
 
-We can diagnose loss of distinct cell types during QC by looking for differences in gene expression between the discarded and retained cells.
-To demonstrate, we compute the average count across the discarded and retained pools in the 416B data set.
+在质量控制过程中，我们可以通过查看丢弃和保留细胞的基因表达差异来判断是否丢失了一些与众不同的细胞类型。
+这里通过计算 416B 数据集中丢弃和保留的细胞池平均值来说明。
 
 ```{r}
 library(SingleCellExperiment)
@@ -94,9 +94,9 @@ lost <- calcAverage(counts(sce.full.416b)[,!sce.full.416b$PassQC])
 kept <- calcAverage(counts(sce.full.416b)[,sce.full.416b$PassQC])
 ```
 
-If the discarded pool is enriched for a certain cell type, we should observe increased expression of the corresponding marker genes.
-No systematic upregulation of genes is apparent in the discarded pool in Figure \@ref(fig:discardplot416b), 
-indicating that the QC step did not inadvertently filter out a cell type in the 416B dataset.
+如果丢弃池中富集着某一种细胞类型，我们应该观察一下对应标志基因的高表达。
+图 \@ref(fig:discardplot416b) 显示丢弃池中没有明显的系统性基因表达上调，说明质量控制步骤在 416B 数据集中
+没有不慎滤除某种细胞类型。
 
 ```{r discardplot416b, fig.cap="Average counts across all discarded and retained cells in the 416B dataset. Each point represents a gene, with spike-in and mitochondrial transcripts in red and blue respectively."}
 # Avoid loss of points where either average is zero.
@@ -111,9 +111,9 @@ is.mito <- rowData(sce.full.416b)$is_feature_control_Mt
 points(capped.lost[is.mito], capped.kept[is.mito], col="dodgerblue", pch=16)
 ```
 
-We examine this more closely by computing log-fold changes between the average counts of the two pools.
-The `predFC` function stabilizes the log-fold change estimates by adding a prior count to the average of each pool.
-We only examine the log-fold changes rather than formally testing for differential expression, as we are not interested in penalizing intra-pool heterogeneity.
+我们可以通过计算两池平均计数的对数倍数差进行更详细的检查。
+`predFC` 函数通过给每个池的平均值添加一个初始计数来稳定对数倍数差估计。
+我们只考察对数倍数差而没有正式地测试差异表达，因为我们的兴趣不在于惩罚池内异质性。
 
 ```{r}
 library(edgeR)
@@ -123,16 +123,16 @@ info <- data.frame(logFC=coefs, Lost=lost, Kept=kept,
 head(info[order(info$logFC, decreasing=TRUE),], 20)
 ```
 
-Again, no obvious cell type markers are present in the top set of genes upregulated in the discarded pool.
-The magnitude of the log-fold changes is less important, attributable to imprecision with few cells in the discarded pool.
-Large log-fold changes can also be driven by enrichment or depletion of mitochondrial, ribosomal protein or nuclear genes upon cell damage.
+再强调一下，在丢弃池中没有明显的细胞类型标志基因呈现高表达。
+由于丢弃池中一些细胞不是很精确，所以对数倍数差的量值也不是很重要。
+细胞破坏引起线粒体、核糖体蛋白质或核基因的丢失都会导致较大对数倍数差。
 
-## In the PBMC data set
+## PBMC 数据集
 
-For comparison, we consider the PBMC data set in which we previously identified a platelet population
-(see the `r simpleSingleCell:::.link("tenx", "Marker gene detection", "previous workflow")`).
-Recall that we relied on the use of the `emptyDrops()` method from the `r Biocpkg("DropletUtils")` package to retain the platelets.
-In contrast, if we had used a naive threshold on the total unique molecular identifier (UMI) count, we would have removed this population during the cell calling step.
+为了作对比，我们同时考虑曾识别出血小板群的 PBMC 数据集。
+（参考 `r simpleSingleCell:::.link("tenx", "Marker gene detection", "previous workflow")）。
+我们之前曾使用 `r Biocpkg("DropletUtils")` 包中的 `emptyDrops()` 方法来保留血小板。
+相反，如果我们对总体唯一分子标识符（UMI）计数随意设置阈值，就有可能会在细胞识别步骤中清除掉这个群体。
 
 ```{r}
 sce.pbmc <- readRDS("pbmc_data.rds")
@@ -142,8 +142,8 @@ lost <- calcAverage(counts(sce.pbmc)[,!wrong.keep])
 kept <- calcAverage(counts(sce.pbmc)[,wrong.keep])
 ```
 
-The presence of a distinct population in the discarded pool manifests in Figure \@ref(fig:discardplotpbmc) as a shift to the bottom-right for a number of genes.
-This includes _PF4_, _PPBP_ and _SDPR_ that are strongly upregulated in the platelets.
+图 \@ref(fig:discardplotpbmc) 中出现的一个不同群体通过右下角一些基因偏移表现出来。
+这些基因包括 _PF4_, _PPBP_ 和 _SDPR_， 都在血小板中明显上调。
 
 ```{r discardplotpbmc, fig.cap="Average counts across all discarded and retained cells in the PBMC dataset, after using a more stringent filter on the total UMI count. Each point represents a gene, with platelet-related genes highlighted in orange."}
 # Avoid loss of points where either average is zero.
@@ -156,7 +156,7 @@ platelet <- c("PF4", "PPBP", "SDPR")
 points(capped.lost[platelet], capped.kept[platelet], col="orange", pch=16)
 ```
 
-These platelet-specific genes are also present among the top set of positive log-fold changes. 
+这些血小板特有基因同样出现在正对数倍数差的前列。
 
 ```{r}
 coefs <- predFC(cbind(lost, kept), design=cbind(1, c(1, 0)))[,2]
@@ -165,36 +165,36 @@ info <- data.frame(logFC=coefs, Lost=lost, Kept=kept,
 head(info[order(info$logFC, decreasing=TRUE),], 20)
 ```
 
-## Avoiding loss of cell types
+## 避免丢失细胞类型
 
-If cell types are being incorrectly discarded, the most direct solution is to relax the QC filters by increasing `nmads=` in the `isOutlier()` calls.
-We can also avoid filtering on metrics that are associated with genuine biological differences between cell types.
-The most extreme approach would be to not perform any QC filtering at all, thus guaranteeing that all cell types in the data are retained.
-However, this obviously comes with an increased risk of retaining more low-quality damaged cells.
-Such cells will cause problems in downstream analyses as discussed above, which motivates the use of a more strict filter (at least on the first pass) in our workflows.
+如果错误丢弃了一些细胞类型，最直接的解决方法就是在调用 `isOutlier()` 时通过提高 `nmads=` 来放宽质量控制筛查。
+同样还可以避免筛除与不同类型细胞间真正的生物学差异相关的指标。
+最极端的方法是不执行任何质量控制筛查，保证数据集中所有细胞类型都被保留。
+但是，很明显，更多低质量被破坏细胞被留下的风险随之增加。
+如上所述，这些细胞会在下游分析中引发问题，促使我们采取更严格的筛选（至少在第一步中）。
 
-As an aside, it is worth mentioning that the true technical quality of a cell may be correlated with its type.
-(This differs from a correlation between the cell type and the QC metrics, as the latter are our imperfect proxies for quality.)
-This can arise if some cell types are not amenable to dissociation or microfluidics handling during the scRNA-seq protocol.
-In such cases, it is possible to correctly discard an entire cell type during QC if all of its members are damaged.
-Indeed, concerns over the computational removal of cell types during QC are probably minor compared to losses in the experimental protocol.
+另外需要提到，一个细胞的技术质量可能与它的类型相关。
+（与细胞类型和质量控制指标间的相关性不同，后者是对质量的不精确替代。）
+这可能会导致在单细胞 RNA 测序实验方案中，对某些细胞类型进行分离和微流控处理会比较麻烦。
+遇到这种情况，如果该细胞类型所有个体都被破坏，可以在质量控制步骤中丢弃这一类型的所有细胞。
+实际上，和实验方案中的损失比较起来，在质量控制中计算清除细胞类型的担忧可能要小一些。
 
-# Alternative approaches to quality control
+# 质量控制的替代方法
 
-## Using fixed thresholds
+# 使用固定阈值
 
-One alternative strategy is to set pre-defined thresholds on each QC metric.
-For example, we might remove all cells with library sizes below 100000 and numbers of expressed genes below 4000.
-This avoids any assumptions associated with the use of outliers to identify low-quality cells.
-However, it generally requires considerable experience to determine appropriate thresholds for each experimental protocol and biological system.
-For example, thresholds for read count-based data are simply not applicable for UMI-based data, and vice versa.
-Indeed, even with the same protocol and system, the appropriate threshold can vary from run to run due to the vagaries of RNA capture and sequencing.
+一个替代策略是对每个质量控制指标设置预定义的阈值。
+例如，我们可以移除所有库容量低于 100000 和表达基因少于 4000 的细胞。
+这样避免了任何使用异常值识别低质量细胞的相关假设。
+但是，需要通过大量的实验对每个实验方案和生物系统设定合适阈值。
+例如基于读段计数的数据阈值不适用于基于 UMI 的数据，反之亦然。
+实际上即使是相同实验方案和系统，因为 RNA 捕获和测序在变化，不同批次的合适阈值也在变化，
 
-## Using PCA-based outliers
+## 使用基于PCA的异常值
 
-Another strategy is to perform a principal components analysis (PCA) based on the quality metrics for each cell, e.g., the total number of reads, the total number of features and the proportion of mitochondrial or spike-in reads.
-Outliers on a PCA plot may be indicative of low-quality cells that have aberrant technical properties compared to the (presumed) majority of high-quality cells.
-This is demonstrated below on a brain cell dataset from @tasic2016adult, using functions from `r Biocpkg("scater")`.
+另一个策略是基于质量指标对每个细胞执行主成分分析（PCA），例如读段总数，特征总数和线粒体或 spike-in 读段占比。
+PCA 图像中的异常值可能暗示着与大多数高质量细胞相比，低质量细胞有着异常的技术特性。
+我们在 @tasic2016adult 的一个脑细胞数据集上使用 `r Biocpkg("scater")` 中的函数来说明。
 
 ```{r}
 # Obtaining the dataset.
@@ -213,26 +213,25 @@ sce.allen <- runPCA(sce.allen, use_coldata=TRUE, detect_outliers=TRUE)
 table(sce.allen$outlier)
 ```
 
-Methods like PCA-based outlier detection and support vector machines can provide more power to distinguish low-quality cells from high-quality counterparts [@ilicic2016classification].
-This is because they are able to detect subtle patterns across many quality metrics simultaneously. 
-However, this comes at some cost to interpretability, as the reason for removing a given cell may not always be obvious.
-Users interested in the more sophisticated approaches are referred to the `r Biocpkg("scater")` and `r Biocpkg("cellity")` packages.
+像基于 PCA 检测异常值或支持向量机这样的方法在从高质量细胞中区分低质量细胞时很有效 [@ilicic2016classification]。
+这是因为它们能够同时通过多个质量指标发现细微的模式。
+然而移除一个给定细胞的原因并不总是那么清晰，这也增加了一些解释成本。
+对于更复杂方法感兴趣的用户可以参考 `r Biocpkg("scater")` 包和 `r Biocpkg("cellity")` 包。
 
-## Using the gene expression profiles
+## 使用基因表达谱
 
-For completeness, we note that outliers can also be identified from the gene expression profiles, rather than QC metrics.
-We consider this to be a risky strategy as it can remove high-quality cells in rare populations.
-Even if subpopulations are explicitly captured with a mixture model, removal of outlier cells will simply reinforce the existing model.
-This may be misleading if it understates the biological heterogeneity in each population.
+为了完整性，我们注意到可以通过基因表达谱而非质量控制指标识别异常值。
+这个策略风险很高，因为它可能会移除少数群体里的高质量细胞。
+即使亚群可以被混合模型捕获，移除异常值细胞只会加强已有模型。
+如果它弱化了每个群体中的生物异质性，那么可能会引起一些误导。
 
-# Concluding remarks 
+# 结语
 
-All software packages used in this workflow are publicly available from the Comprehensive R Archive Network (https://cran.r-project.org) or the Bioconductor project (http://bioconductor.org).
-The specific version numbers of the packages used are shown below, along with the version of the R installation.
+此工作流程中的所有软件包都可以在 Comprehensive R Archive Network (https://cran.r-project.org) 或 Bioconductor project (http://bioconductor.org) 获取。
+包的版本号及对应的R版本如下所示。
 
 ```{r}
 sessionInfo()
 ```
 
-# References
-
+# 参考文献
