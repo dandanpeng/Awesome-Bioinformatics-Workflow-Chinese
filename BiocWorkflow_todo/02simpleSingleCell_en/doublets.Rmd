@@ -1,5 +1,5 @@
 ---
-title: Detecting doublets in single-cell RNA-seq data
+title: 检测单细胞 RNA 测序数据中的双细胞
 author:
 - name: Aaron T. L. Lun
   affiliation: &CRUK Cancer Research UK Cambridge Institute, Li Ka Shing Centre, Robinson Way, Cambridge CB2 0RE, United Kingdom
@@ -22,27 +22,27 @@ opts_chunk$set(error=FALSE, message=FALSE, warning=FALSE, cache=TRUE)
 opts_chunk$set(fig.asp=1)
 ```
 
-# Overview
+# 综述
 
-In single-cell RNA sequencing (scRNA-seq) experiments, doublets are artifactual libraries generated from two cells.
-They typically arise due to errors in cell sorting or capture, especially in droplet-based protocols [@zheng2017massively] involving thousands of cells.
-Doublets are obviously undesirable when the aim is to characterize populations at the _single_-cell level.
-In particular, they can incorrectly suggest the existence of intermediate populations or transitory states that not actually exist.
-Thus, it is desirable to remove doublet libraries so that they do not compromise interpretation of the results.
+在单细胞 RNA 测序（scRNA-seq）实验中，双细胞是两个细胞产生的人工文库。
+它们的产生主要是因为细胞排序或捕获中出现错误，特别是包含上千个细胞的基于液滴实验方案 [@zheng2017massively]。
+当目标为在 __单__ 细胞水平上进行群体表征，很明显双细胞会引发问题。
+尤其是它们可能会错误地暗示实际上并不存在的中间群体或临时状态存在。
+因此最好移除双细胞文库，这样它们就不会影响结果解释。
 
-Several experimental strategies are available for doublet removal.
-One approach exploits natural genetic variation when pooling cells from multiple donor individuals [@kang2018multiplexed].
-Doublets can be identified as libraries with allele combinations that do not exist in any single donor.
-Another approach is to mark a subset of cells (e.g., all cells from one sample) with an antibody conjugated to a different oligonucleotide [@stoeckius2017hashing].
-Upon pooling, libraries that are observed to have different oligonucleotides are considered to be doublets and removed.
-These approaches can be highly effective but rely on experimental information that may not be available.
+目前有几个实验策略用于双细胞移除。
+一个方法是通过多个捐赠者池化细胞时利用自然遗传变异 [@kang2018multiplexed]。
+双细胞可以被当作是不存在于任何单个捐献者体内的等位基因组合文库。
+另一个方法是用与其他寡核苷酸偶联的抗体来标记一部分细胞（例如来自同一样本的所有细胞）[@stoeckius2017hashing]。
+池化时，我们认为含有不同寡核苷酸的文库是双细胞，需要去除。
+这些方法很有效，但是依赖于一些不便获取的实验信息。
 
-A more general approach is to infer doublets from the expression profiles alone [@dahlin2018single].
-In this workflow, we will describe two purely computational approaches for detecting doublets from scRNA-seq data.
-The main difference between these two methods is whether or not they need cluster information beforehand.
-Both are implemented in the `r Biocpkg("scran")` package from the open-source Bioconductor project [@huber2015orchestrating].
-We will demonstrate the use of these methods on data from a droplet-based scRNA-seq study of the mouse mammary gland [@bach2017differentiation],
-available from NCBI GEO with the accession code GSE106273.
+更广泛使用的方法是仅根据表达谱推测双细胞 [@dahlin2018single]。
+在此工作流程中，我们会提供两种从单细胞 RNA 测序数据中发现双细胞的纯计算方法。
+这两种方法的主要区别在于事先是否需要聚类信息。
+它们均在开源 Bioconductor 项目中的 `r Biocpkg("scran")` 包内实现 [@huber2015orchestrating]。
+下面将通过基于液滴单细胞 RNA 测序研究小鼠乳腺的数据 [@bach2017differentiation] 来说明这两种方法的使用，
+数据可通过 NCBI GEO 登录号 GSE106273 获取。
 
 ```{r}
 library(BiocFileCache)
@@ -56,12 +56,12 @@ counts.fname <- bfcrpath(bfc, file.path(base.path,
     "GSM2834500%5FG%5F1%5Fmatrix%2Emtx%2Egz"))
 ```
 
-# Preparing the data
+# 准备数据
 
-## Reading in the counts
+## 读入计数
 
-We create a `SingleCellExperiment` object from the count matrix.
-The files have been modified from the _CellRanger_ output, so we have to manually load them in rather than using `read10xCounts()`.
+通过计数矩阵构建一个 `SingleCellExperiment` 对象。
+这个文件通过修改 _CellRanger_ 输出得到，所以需要手动加载而不能使用 `read10xCounts()`。
 
 ```{r}
 library(scater)
@@ -75,8 +75,8 @@ sce <- SingleCellExperiment(
 )
 ```
 
-We put some more meaningful information in the row and column names.
-Note the use of `uniquifyFeatureNames()` to generate unique row names from gene symbols.
+将更有意义的信息放在行名与列名中。
+使用 `uniquifyFeatureNames()` 可以从 gene symbol 中生成特定行名。
 
 ```{r}
 rownames(sce) <- uniquifyFeatureNames(
@@ -85,7 +85,7 @@ colnames(sce) <- sce$Barcode
 sce
 ```
 
-We add some genomic location annotation for downstream use.
+加入一些基因组定位注释以便下游分析。
 
 ```{r}
 library(TxDb.Mmusculus.UCSC.mm10.ensGene)
@@ -94,9 +94,9 @@ chrloc <- mapIds(TxDb.Mmusculus.UCSC.mm10.ensGene, keytype="GENEID",
 rowData(sce)$Chr <- chrloc
 ```
 
-## Quality control
+## 质量控制
 
-We compute quality control (QC) metrics using the `calculateQCMetrics()` function from the `r Biocpkg("scater")` package [@mccarthy2017scater].
+通过 `r Biocpkg("scater")` 包 [@mccarthy2017scater] 中的 `calculateQCMetrics()` 函数计算质量控制指标。
 
 ```{r}
 is.mito <- rowData(sce)$Chr == "chrM"
@@ -104,8 +104,8 @@ summary(is.mito)
 sce <- calculateQCMetrics(sce, feature_controls=list(Mito=which(is.mito)))
 ```
 
-We remove cells that are outliers for any of these metrics, as previously discussed.
-Note that some quality control was already performed by the authors of the original study, so relatively few cells are discarded here.
+如之前所述，移除了所有指标中的异常值细胞。
+注意原研究作者已经执行了一些质量控制手段，所以这里丢弃的细胞相对较少。
 
 ```{r}
 low.lib <- isOutlier(sce$total_counts, log=TRUE, nmads=3, type="lower")
@@ -116,15 +116,15 @@ DataFrame(LowLib=sum(low.lib), LowNum=sum(low.nexprs), HighMito=sum(high.mito),
     Discard=sum(discard), Kept=sum(!discard))
 ```
 
-We then subset the `SingleCellExperiment` object to remove these low-quality cells.
+对 `SingleCellExperiment` 对象取子集以移除低质量细胞。
 
 ```{r}
 sce <- sce[,!discard]
 ```
 
-## Normalization for cell-specific biases
+## 归一化细胞特异性变差
 
- We apply the deconvolution method with pre-clustering [@lun2016pooling] to compute size factors for scaling normalization of cell-specific biases.
+在预聚类时使用去卷积方法计算用于缩放归一化细胞特异性偏差的量化因子。
 
 ```{r}
 library(scran)
@@ -136,17 +136,17 @@ sce <- computeSumFactors(sce, clusters=clusters, min.mean=0.1)
 summary(sizeFactors(sce))
 ```
 
-We then compute log-normalized expression values for downstream use.
-This data set does not contain spike-in transcripts so separate normalization with `computeSpikeFactors()` is not required.
+然后计算归一化对数表达量以便下游使用。
+此数据集不包含 spike-in 转录本，所以无需使用 `computeSpikeFactors()` 进行单独归一化。
 
 ```{r}
 sce <- normalize(sce)
 assayNames(sce)
 ```
 
-## Modelling and removing noise
+## 模拟并去除噪音
 
-As we have no spike-ins, we model technical noise using the `makeTechTrend()` function.
+因为我们没有 spike-in，所以这里使用 `makeTechTrend()` 函数来模拟技术噪音。
 
 ```{r varplot, fig.cap="Variance of the log-expression values as a function of the mean log-expression in the mammary gland data set. Each point represents a gene, and the red line corresponds to Poisson variance."}
 tech.trend <- makeTechTrend(x=sce)
@@ -157,8 +157,8 @@ plot(fit$mean, fit$var, pch=16,
 curve(tech.trend(x), add=TRUE, col="red")
 ```
 
-We use `denoisePCA()` to choose the number of principal components (PCs) to retain based on the technical noise per gene.
-We need to set the seed for reproducibility when `BSPARAM=IrlbaParam()`, due to the use of randomized methods from `r Biocpkg("irlba")`.
+基于每个基因的技术噪音，使用 `denoisePCA()` 选择保留主成分个数。
+由于使用了 `r Biocpkg("irlba")` 中的随机方法，当 `BSPARAM=IrlbaParam()` 时，需要设置种子以便重复。
 
 ```{r}
 set.seed(12345)
@@ -166,10 +166,10 @@ sce <- denoisePCA(sce, technical=tech.trend, BSPARAM=IrlbaParam())
 ncol(reducedDim(sce))
 ```
 
-## Clustering into subpopulations
+## 聚类为亚群
 
-We cluster cells into putative subpopulations using `buildSNNGraph()` [@xu2015identification].
-We use a higher `k` to increase connectivity and reduce the granularity of the clustering.
+使用 `buildSNNGraph()` [@xu2015identification] 将细胞聚类为假定亚群。
+使用更高的 `k` 值提高聚类的连通性，降低粒度。
 
 ```{r}
 snn.gr <- buildSNNGraph(sce, use.dimred="PCA", k=25)
@@ -177,8 +177,8 @@ sce$Cluster <- factor(igraph::cluster_walktrap(snn.gr)$membership)
 table(sce$Cluster)
 ```
 
-We visualize the clustering on a _t_-SNE plot [@van2008visualizing].
-Figure \@ref(fig:tsneclust) shows that there are a number of well-separated clusters as well as some more inter-related clusters.
+在 _t_-SNE 图中可视化聚类结果 [@van2008visualizing]。
+图 \@ref(fig:tsneclust) 表明有一些间隔清晰的类，也有一些相互联系的类。
 
 ```{r tsneclust, fig.cap="t-SNE plot of the mammary gland data set. Each point is a cell coloured according to its assigned cluster identity."}
 set.seed(1000)
@@ -186,19 +186,19 @@ sce <- runTSNE(sce, use_dimred="PCA")
 plotTSNE(sce, colour_by="Cluster")
 ```
 
-# Doublet detection with clusters
+## 通过聚类发现双细胞
 
-The `doubletCluster()` function will identify clusters that have intermediate expression profiles of two other clusters [@bach2017differentiation].
-Specifically, it will examine every possible triplet of clusters consisting of a query cluster and its two "parents".
-It will then compute a number of statistics:
+`doubletCluster()` 函数会识别具有其他两个类群中间表达谱的类群 [@bach2017differentiation]。
+也就是说，它会检查每三个类：包括一个查询类和它的两个父类。
+然后计算得到一些统计量：
 
-- The number of genes (`N`) that are differentially expressed in the same direction in the query cluster compared to _both_ of the parent clusters.
-Such genes would be unique markers for the query cluster and provide evidence against the null hypothesis, i.e., that the query cluster consists of doublets from the two parents.
-Clusters with few unique genes are more likely to be doublets.
-- The ratio of the median library size in each parent to the median library size in the query (`lib.size*`).
-Doublet libraries are generated from a larger initial pool of RNA compared to libraries for single cells, and thus the former should have larger library sizes.
-Library size ratios much greater than unity are inconsistent with a doublet identity for the query.
-- The proportion of cells in the query cluster should also be reasonable - typically less than 5% of all cells, depending on how many cells were loaded onto the 10X Genomics device.
+- 查聚类和两个父类 _都_ 进行比较，得到在相同方向差异表达的基因数目（`N`）。
+这些基因将会是查询类的特有标记，并为零假设提供证据，例如查询类含有来自两个父类的双细胞。
+含有极少特有基因的类群更有可能是双细胞。
+- 每个父类样本中文库大小的中位数与查询聚类中文库大小的中位数的比值（`lib.size*`）。
+双细胞文库产生自一个与单细胞相比更大的 RNA 初始池，因此前者的文库应当更大。
+文库大小比值远大于总量的情况与查询类的双细胞身份不符。
+- 查询类中的细胞占比也应该是合理的 —— 一般少于所有细胞的 5%，取决于有多少细胞装载到 10X 基因组设备上。
 
 ```{r}
 dbl.out <- doubletCluster(sce, sce$Cluster)
@@ -211,8 +211,8 @@ dbl.out
 chosen.doublet <- 7
 ```
 
-Examination of the output of `doubletCluster()` indicates that cluster `r chosen.doublet` has the fewest unique genes and library sizes that are comparable to or greater than its parents.
-We see that every gene detected in this cluster is also expressed in either of the two proposed parent clusters (Figure \@ref(fig:heatclust)).
+对 `doubletCluster()` 输出结果的检查表明，类 `r chosen.doublet` 的特有基因最少而文库大小近似或大于父类。
+可以看到这个类中检测出的每个基因都在两个拟定父类之一中表达（图 \@ref(fig:heatclust)）。
 
 ```{r heatclust, fig.cap=sprintf("Heatmap of mean-centred and normalized log-expression values for the top set of markers for cluster %i in the mammary gland dataset. Column colours represent the cluster to which each cell is assigned, as indicated by the legend.", chosen.doublet)}
 markers <- findMarkers(sce, sce$Cluster, direction="up")
@@ -234,48 +234,48 @@ below <- csn2 < 0
 stopifnot(all(acta2[below] == 1))
 ```
 
-Closer examination of some known markers suggests that the offending cluster consists of doublets of basal cells (_Acta2_) and alveolar cells (_Csn2_) (Figure \@ref(fig:markerexprs)).
-Indeed, no cell type is known to strongly express both of these genes at the same time, which supports the hypothesis that this cluster consists solely of doublets^[Of course, it is possible that this cluster represents an entirely novel cell type, though the presence of doublets provides a more sober explanation for its expression profile.].
+对一些已知标记基因进行进一步检查，发现该类包含基底细胞（_Acta2_）和肺泡细胞（_Csn2_）的双细胞（图 \@ref(fig:markerexprs)）。
+实际上，并没有已知细胞类型同时高表达这些基因，也支持该类仅包含双细胞的假设^[尽管出现双细胞是对该类表达谱更严谨的解释，当然也有可能是它代表一个全新的细胞类型，]。
 
 ```{r markerexprs, fig.asp=0.5, fig.width=10, fig.cap="Distribution of log-normalized expression values for _Acta2_ and _Csn2_ in each cluster. Each point represents a cell."}
 plotExpression(sce, features=c("Acta2", "Csn2"), 
     x="Cluster", colour_by="Cluster")
 ```
 
-The strength of `doubletCluster()` lies in its simplicity and ease of interpretation.
-Suspect clusters can be quickly flagged for further investigation, based on the metrics returned by the function.
-However, it is obviously dependent on the quality of the clustering.
-Clusters that are too coarse will fail to separate doublets from other cells, while clusters that are too fine will complicate interpretation.
+`doubletCluster()` 的强项在于简洁和易于解释。
+基于这个函数返回的指标，可以对存疑类快速标记以便进一步调查。
+但很显然它依赖于聚类质量。
+过于粗糙的聚类可能无法将双细胞与其它细胞区分开来，但过于精细的聚类又会让解释变复杂。
 
-**Comments from Aaron:**
+**来自 Aaron 的评论：**
 
-- The output of `doubletClusters()` should be treated as a prioritization of "high-risk" clusters that require more careful investigation.
-We do not recommend using a fixed threshold on any of the metrics to identify doublet clusters.
-Any appropriate threshold for the metrics will depend on the quality of the clustering and the biological context.
-- The pair of parents for each query cluster are identified solely on the basis of the lowest `N`.
-This means that any `lib.size*` above unity is not definitive evidence against a doublet identity for a query cluster.
-It is possible for the "true" parent clusters to be adjacent to the detected parents but with slightly higher `N`.
-If this occurs, inspect the `all.pairs` field for statistics on all possible parent pairs for a given query cluster. 
-- Clusters with few cells are implicitly more likely to be detected as doublets.
-This is because they will have less power to detect DE genes and thus the value of `N` is more likely to be small.
-Fortunately for us, this is a desirable effect as doublets should be rare in a properly performed scRNA-seq experiment.
+- `doubletClusters()` 输出应该被看作是具有优先级的「高风险」类，需要更细致的调查。
+我们不推荐在识别双细胞类时对所有指标设置固定阈值。
+指标的合适阈值取决于聚类质量和生物学背景。
+- 每个查询类的那对父类都是基于最低 `N` 值单独识别出。
+这说明不是任何高于 unity 的 `lib.size*` 都能作为查询类是双细胞的确凿证据。
+可能是「真正的」父类紧邻检测到的父类，但是 `N` 值略高。
+如果发生这种情况，查看 `all.pairs` 域中给定查询类所有可能父类对的统计量。
+- 具有少量细胞的类更有可能被识别为双细胞。
+这是因为在它们中发现差异表达基因的可能性更小，因此 `N` 值很可能较小。
+幸运的是，这一影响对我们来说是好事，因为在正确操作的单细胞 RNA 测序实验中，双细胞本就应该很稀少。
 
-# Doublet detection by simulation
+# 通过模拟检测双细胞
 
-## Background
+## 背景
 
-The other doublet detection strategy involves _in silico_ simulation of doublets from the single-cell expression profiles [@dahlin2018single].
-This is performed using the `doubletCells()` function from `r Biocpkg("scran")`, which will:
+另一个检测双细胞的策略是根据单细胞表达谱 _计算机_ 模拟双细胞 [@dahlin2018single]。
+通过 `r Biocpkg("scran")` 中的 `doubletCells()` 函数可以：
 
-1. Simulate thousands of doublets by adding together two randomly chosen single-cell profiles.
-2. For each original cell, compute the density of simulated doublets in the surrounding neighbourhood.
-3. For each original cell, compute the density of other observed cells in the neighbourhood.
-4. Return the ratio between the two densities as a "doublet score" for each cell.
+1. 加入两个随机选择的单细胞表达谱模拟上千个双细胞。
+2. 对每个初始细胞计算周边环境中模拟双细胞的密度。
+3. 对每个初始细胞计算周围邻居中可观测细胞的密度。
+4. 返回两个密度的比值作为每个细胞的「双细胞分数」。
 
-This approach assumes that the simulated doublets are good approximations for real doublets.
-The use of random selection accounts for the relative abundances of different subpopulations, which affect the likelihood of their involvement in doublets;
-and the calculation of a ratio avoids high scores for non-doublet cells in highly abundant subpopulations.
-We see the function in action below:
+这个方法假设模拟双细胞和真是双细胞十分类似。
+使用随机选择可以解释不同亚群的相对丰度，它影响了亚群介入双细胞的可能性；
+计算比值避免了高丰度亚群中的非双细胞细胞获得高分。
+接下来运行这个函数：
 
 ```{r}
 set.seed(100)
@@ -283,86 +283,86 @@ dbl.dens <- doubletCells(sce, BSPARAM=IrlbaParam())
 summary(dbl.dens)
 ```
 
-The highest doublet scores are concentrated in a single cluster of cells in the centre of Figure \@ref(fig:denstsne).
+得分最高的双细胞聚集在单个细胞类中，位于图 \@ref(fig:denstsne) 中央。
 
 ```{r denstsne, fig.cap="t-SNE plot of the mammary gland data set. Each point is a cell coloured according to its doublet density."}
 sce$DoubletScore <- dbl.dens
 plotTSNE(sce, colour_by="DoubletScore")
 ```
 
-From the clustering information, we see that the affected cells belong to the same cluster that was identified using `doubletCluster()` (Figure \@ref(fig:densclust)). 
+根据聚类信息，我们可以看到受影响的细胞属于同一类，即由 `doubletCluster()` 识别出的类（图 \@ref(fig:densclust)）。
 
 ```{r densclust, fig.cap="Distribution of doublet scores for each cluster in the mammary gland data set. Each point is a cell."}
 plotColData(sce, x="Cluster", y="DoubletScore", colour_by="Cluster")
 ```
 
-**Comments from Aaron:**
+**来自 Aaron 的评论：**
 
-- To speed up the density calculations, `doubletCells()` will perform a PCA on the log-expression matrix. 
-When `BSPARAM=IrlbaParam()`, methods from the `r CRANpkg("irlba")` package are used to perform a fast approximate PCA.
-This involves randomization so it is necessary to call `set.seed()` to ensure that results are reproducible.
+- 为加速密度计算，`doubletCells()` 对对数表达矩阵执行了主成分分析。
+当 `BSPARAM=IrlbaParam()` 时，`r CRANpkg("irlba")` 包会执行快速近似主成分分析。
+这里包含随即项，需要调用 `set.seed()` 以确保结果可重复。
 
-## Strengths and weaknesses 
+## 优点与缺点
 
-The advantage of `doubletCells()` is that it does not depend on clusters, reducing the sensitivity of the results to clustering quality.
-The downside is that it requires some strong assumptions about how doublets form, such as the combining proportions and the sampling from pure subpopulations.
-In particular, `doubletCells()` treats the library size of each cell as an accurate proxy for its total RNA content.
-If this is not true, the simulation will not combine expression profiles from different cells in the correct proportions.
-This means that the simulated doublets will be systematically shifted away from the real doublets, resulting in doublet scores that are too low for the latter.
+`doubletCells()` 的优点是不依赖聚类，降低了结果对聚类质量的敏感度。
+缺点是对于双细胞的形成需要强有力的假设，例如合并比例和采样自纯亚群。
+尤其是 `doubletCells()` 将每个细胞的文库大小视作它们总 RNA 含量的精确替代值。
+如果这里出错的话，模拟时也会以错误的比例结合不同细胞的表达谱。
+意味着模拟双细胞会系统地从真实双细胞偏离，导致后者的双细胞得分过低。
 
-Simply removing cells with high doublet scores will not be sufficient to eliminate real doublets from the data set.
-As we can see in Figure \@ref(fig:densclust), only a subset of the cells in the putative doublet cluster actually have high scores.
-Removing these would still leave enough cells in that cluster to mislead downstream analyses.
-In fact, even defining a threshold on the doublet score is difficult as the interpretation of the score is relative.
-There is no general definition for a fixed threshold above which libraries are to be considered doublets.
+简单地将双细胞分数高的细胞移除不足以从数据集中清除真正的双细胞。
+如图 \@ref(fig:densclust) 所示，只有一部分被认定为双细胞类中的细胞具有高分。
+移除掉这些还是会给那一类遗留下足够的细胞误导下游分析。
+实际上，因为对于分数的解释是相对的，所以很难给双细胞分数定义一个阈值。
+对于文库大小要超过多少时才可以被认为是双细胞并没有一个一般性定义。
 
-We recommend interpreting the `doubletCells()` scores in the context of cluster annotation.
-All cells from a cluster with a large average doublet score should be considered suspect.
-Close neighbours of problematic clusters (e.g., identified by `clusterModularity()`, see `r simpleSingleCell:::.link("umis", "Evaluating graph-based clusters", "here")`) should be treated with caution.
-A cluster containing a small proportion of high-scoring cells is generally safe for downstream analyses, provided that the user investigates any interesting results to ensure that they are not being driven by those cells^[For example, checking that DE in an interesting gene is not driven solely by cells with high doublet scores.].
-While clustering is still required, this approach is more robust than `doubletClusters()` to the quality of the clustering.
+我们建议根据类群注释来解释 `doubletCells()` 得分。
+双细胞分数平均值高的类群中的所有细胞都有嫌疑。
+出现问题的类群 （例如被 `clusterModularity()` 识别出，详见 `r simpleSingleCell:::.link("umis", "Evaluating graph-based clusters", "here")`）应当谨慎对待。
+仅含一小部分高分细胞的类群可以参与下游分析，前提是用户已经调查确认它们没有被这些高分细胞驱动^[例如，检查一个感兴趣的基因的差异表达不仅仅由双细胞高分细胞驱动。]。
+尽管聚类仍然需要，这个方法在聚类质量上优于`doubletClusters()`。
 
-**Comments from Aaron:**
+**来自 Aaron 的评论：**
 
-- In some cases, we can improve the clarity of the result by setting `force.match=TRUE` in the `doubletCells()` call.
-This will forcibly match each simulated doublet to the nearest neighbouring cells in the original data set.
-Any systematic differences between simulated and real doublets will be removed, provided that the former are close enough to the latter to identify the correct nearest neighbours.
-This overcomes some of issues related to RNA content but is a rather aggressive strategy that may incorrectly inflate the reported doublet scores.
-- The issue of unknown combining proportions can be solved completely if spike-in information is available, e.g., in plate-based protocols.
-This will provide an accurate estimate of the total RNA content of each cell.
-To this end, size factors from `computeSpikeFactors()` (see `r simpleSingleCell:::.link("spike", NULL, label="here")`) can be supplied to the `doubletCells()` function via the `size.factors.content=` argument.
-This will use the spike-in size factors to scale the contribution of each cell to a doublet library.
+- 有些情况下，调用 `doubletCells()` 时设置 `force.match=TRUE` 可以让结果更明晰。
+这个参数强制匹配每个模拟双细胞与原始数据集中的近邻细胞。
+如果模拟双细胞与真实双细胞之间足够近，可以正确得识别出近邻，那么二者之间的任何系统差异都会被移除。
+这解决了一些与 RNA 含量相关的问题，但也是一个激进策略，可能会错误地夸大报告双细胞得分。
+- 如果可以获取 spike-in 信息，例如采用基于平板的实验方案，那么结合比例未知的问题完全可以解决。
+这会给每个细胞的总 RNA 含量提供一个准确估计。
+为此，`computeSpikeFactors()` 中的量化因子（见`r simpleSingleCell:::.link("spike", NULL, label="here")`）可以通过参数 `size.factors.content=` 提供给函数 `doubletCells()`。
+它会通过 spike-in 量化因子按比计算每个细胞对双细胞文库的贡献。
 
-# Concluding remarks
+# 结语
 
-Doublet detection procedures should only be applied to libraries generated in the same experimental batch.
-It is obviously impossible for doublets to form between two cells that were captured separately.
-Thus, some understanding of the experimental design is required prior to the use of the above functions.
-This avoids unnecessary concerns about the validity of clusters when they cannot possibly consist of doublets.
+双细胞检测步骤只适用于同一实验批次产生的文库。
+显然双细胞不会在两个被单独捕获的细胞间形成。
+因此，在使用上述函数前需要对实验设计有一些基本理解，
+以免对不可能包含双细胞的类群的合理性产生不必要担忧。
 
-It is also difficult to interpret doublet predictions in data containing cellular trajectories.
-By definition, cells in the middle of a trajectory are always intermediate between other cells and are liable to be incorrectly detected as doublets.
-Some protection is provided by the non-linear nature of many real trajectories, which reduces the risk of simulated doublets coinciding with real cells in `doubletCells()`.
-One can also put more weight on the relative library sizes in `doubletCluster()` instead of relying on `N`, 
-under the assumption that sudden spikes in RNA content are unlikely in a continuous biological process.
+对于包含细胞轨迹的数据，很难去解释双细胞预测结果。
+根据定义，位于轨迹中点的细胞一定是两个细胞中间体，容易被误认为是双细胞。
+许多真实轨迹的非线性特性提供了保护作用，降低了模拟双细胞与 `doubletCells()` 中真实细胞一致的风险。
+在连续的生物过程中不太可能突然有 RNA 加入的假设下，
+大家也可以多注意 `doubletCluster()` 中相对文库大小而不是只关注 `N` 值。
 
-The best solution to the doublet problem is experimental - that is, to avoid generating them in the first place.
-This should be a consideration when designing scRNA-seq experiments, where the desire to obtain large numbers of cells at minimum cost should be weighed against the general deterioration in data quality and reliability when doublets become more frequent^[Not that penny-pinching PIs would understand, but one can only hope.].
-Other experimental approaches make use of sample-specific cell "labels" to identify doublets in multiplexed experiments [@kang2018multiplexed;@stoekius2018hashing].
-If this information is available, we recommend using it to mark potential doublet clusters rather than simply removing doublets directly, 
-as the latter approach will not remove doublets of cells with the same label.
+解决双细胞问题的最好方案是实验 —— 在一开始避免它们产生。
+在设计单细胞 RNA 测序实验时就应当考虑好，在以最低成本获得大量细胞和双细胞变多会破坏数据质量与可靠性之间做好权衡^[但我们希望不那么抠门的课题负责人都能理解。]。
+其他实验方法利用样本特异细胞「标签」识别多重实验中的双细胞 [@kang2018multiplexed;@stoekius2018hashing]。
+如果可以获取这些信息，建议利用它们标记可能的双细胞类群而不是简单地将其直接移除，
+因为后者不会移除标记相同的细胞组成的双细胞。
 
-We save the `SingleCellExperiment` object with its associated data to file for future use.
+保存 `SingleCellExperiment` 对象和相关数据以便后续使用。
 
 ```{r}
 saveRDS(sce, file="mammary_data.rds")
 ```
 
-All software packages used in this workflow are publicly available from the Comprehensive R Archive Network (https://cran.r-project.org) or the Bioconductor project (http://bioconductor.org).
-The specific version numbers of the packages used are shown below, along with the version of the R installation.
+此工作流程中的所有软件包都可以在 Comprehensive R Archive Network (https://cran.r-project.org) 或 Bioconductor project (http://bioconductor.org) 获取。
+包的版本号及对应的R版本如下所示。
 
 ```{r}
 sessionInfo()
 ```
 
-# References
+# 参考文献
