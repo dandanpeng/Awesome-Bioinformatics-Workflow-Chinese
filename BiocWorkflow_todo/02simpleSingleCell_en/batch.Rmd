@@ -841,6 +841,10 @@ summary(cor.exp)
 我们保存了 `SingleCellExperiment` 对象以随时使用。
 避免上述步骤存在多余重复。
 
+```{r}
+saveRDS(file="pancreas_data.rds", sce)
+```
+
 此工作流程中所有软件包都可以在 Comprehensive R Archive Network (https://cran.r-project.org) 或 Bioconductor project (http://bioconductor.org) 获取。
 包的版本号及对应R版本如下所示。
 
